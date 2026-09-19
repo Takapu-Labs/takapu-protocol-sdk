@@ -1,0 +1,211 @@
+syntax = "proto3";
+
+package marketstream.v1;
+
+option go_package = "github.com/Takapu-Labs/takapu-protocol-sdk/pkg/types";
+
+// -----------------------------------------------------------------------------
+//
+// Two independent WebSocket connections share this schema:
+//   - Market Maker <-> Marketstream service (MakerEnvelope)
+//   - Execution Router <-> Marketstream service (RouterEnvelope)
+// -----------------------------------------------------------------------------
+
+// ============================================================================
+// Shared types
+// ============================================================================
+
+message Heartbeat {
+  bool ping = 1;
+  bool pong = 2;
+}
+
+message PairKey {
+  uint64 chainId = 1;
+  uint32 pairId = 2;
+  string baseToken = 3;
+  string quoteToken = 4;
+}
+
+message PriceLevel {
+  // Human-readable decimal price in quote tokens per base token, converted
+  // using both tokens' decimals rather than expressed in native token units.
+  string price = 1;
+  // Human-readable decimal amount in base tokens, converted using the base
+  // token's decimals.
+  string amount = 2;
+}
+
+// CompactFrame contains the three raw bytes32 slots used by the contract.
+// These fields are signed. Marketstream forwards them unchanged from Maker
+// to Router so that repacking cannot invalidate the signature.
+message CompactFrame {
+  bytes header = 1;      // Raw bytes32 header in the contract's packed format.
+  bytes bidLevels = 2;   // bytes32; five 48-bit levels: offset (24) | qtyLots (24).
+  bytes askLevels = 3;   // bytes32; the same layout as bidLevels.
+}
+
+// Maker supplies the complete MarketFrame, including its human-readable prices
+// and amounts. Marketstream validates these values without deriving missing
+// fields or modifying the signed frame. Router can read the prices and amounts
+// without decoding the packed header or levels.
+//
+// Only decoded fields needed by Router are included. Maker converts baseTick
+// and the packed levels into bids and asks; Marketstream reads baseTick directly
+// from frame.header when validating them. The majorVersion and minorVersion
+// values also remain in frame.header and are decoded there for version checks.
+//
+// The contract sets bidFilledLots, askFilledLots, and writtenAt when frames are
+// written or trades execute on-chain. These fields are zero in signed calldata
+// and are not forwarded separately. Filled-lot counters persist within a major
+// version, so Maker must account for on-chain fills before declaring executable
+// depth in bids and asks. Maker tracks fills and manages inventory independently
+// of Marketstream.
+message MarketFrame {
+  // Must match updatedAt in frame.header. Router combines this timestamp with
+  // the current time and global decay parameters obtained separately from
+  // pair metadata to calculate current decayed prices.
+  uint32 updatedAt = 1;
+  // pairId must match the uint32 pairId encoded in frame.header.
+  PairKey pair = 2;
+  // Bids in descending price order, with decimal prices and amounts describing
+  // executable depth after Maker's inventory checks.
+  repeated PriceLevel bids = 3;
+  // Asks in ascending price order, with the same depth semantics as bids.
+  repeated PriceLevel asks = 4;
+  // Original signed header and levels, used by Router for on-chain submission.
+  CompactFrame frame = 5;
+  // Ethereum maker contract address associated with the authenticated Maker
+  // identity on this chain. Signature verification recovers the registered
+  // frameSigner() EOA, not the maker contract address, using local ECDSA
+  // recovery and comparison. Marketstream does not use ERC-1271 or make an
+  // on-chain call to verify the signature.
+  //
+  // Maker -> Marketstream preserves the claimed address's original spelling;
+  // Marketstream normalizes it only for comparison. Marketstream -> Router
+  // replaces this field with the trusted address confirmed during validation,
+  // normalized to lowercase.
+  string makerAddr = 6;
+  // Exactly 65 bytes in r||s||v wire form. Local ECDSA recovery must match
+  // the frameSigner() currently registered for makerAddr.
+  bytes signature = 7;
+}
+
+// ============================================================================
+// Market Maker <-> Marketstream service
+// ============================================================================
+
+message MakerEnvelope {
+  MakerMessageType type = 1;
+  // Unix milliseconds when Maker or Marketstream sent this message. Used only
+  // for observation and logging. Freshness validation uses MarketFrame.updatedAt
+  // and the global maxAge parameter instead.
+  int64 timestamp = 2;
+  oneof payload {
+    MarketFrame frame_push = 3;
+    FrameAck frame_ack = 4;             // Marketstream -> Maker; rejection only.
+    Heartbeat heartbeat = 5;
+    ConnectionAck connection_ack = 7;
+  }
+}
+
+enum MakerMessageType {
+  MAKER_MESSAGE_TYPE_UNSPECIFIED = 0;
+  MAKER_MESSAGE_TYPE_FRAME_PUSH = 1;          // Maker -> Marketstream
+  MAKER_MESSAGE_TYPE_FRAME_ACK = 2;           // Marketstream -> Maker
+  MAKER_MESSAGE_TYPE_HEARTBEAT = 3;           // Bidirectional
+  MAKER_MESSAGE_TYPE_CONNECTION_ACK = 5;      // Marketstream -> Maker
+}
+
+// Sent only when a frame is rejected. accepted is always false; successful
+// frames do not receive an acknowledgement.
+message FrameAck {
+  PairKey pair = 1;
+  // Frame versions are ordered lexicographically by (majorVersion, minorVersion).
+  uint32 majorVersion = 2;
+  uint32 minorVersion = 3;   // A uint8 contract value represented as uint32.
+  bool accepted = 4;
+  string reject_step = 5;    // Identifier of the failed validation step.
+  // Human-readable reason for rejection. Does not disclose trusted internal
+  // state, such as the expected address.
+  string reject_reason = 6;
+}
+
+// ConnectionAck is shared by Maker and Router connections. For Maker, identity
+// is the stable makerId bound to the authenticated connection. A Maker may use
+// different contract addresses on different chains, so this identifier is not
+// an on-chain address. Router connections leave identity empty.
+message ConnectionAck {
+  bool success = 1;
+  string identity = 2;
+  int64 server_time = 3;
+}
+
+// ============================================================================
+// Execution Router <-> Marketstream service
+// ============================================================================
+
+message RouterEnvelope {
+  RouterMessageType type = 1;
+  // Unix milliseconds when Router or Marketstream sent this message.
+  // Used only for observation and logging, as in MakerEnvelope.timestamp.
+  int64 timestamp = 2;
+  oneof payload {
+    SubscribeRequest subscribe = 3;
+    SubscribeAck subscribe_ack = 5;
+    MarketFrame update = 8;
+    Heartbeat heartbeat = 9;
+    Error error = 10;
+    ConnectionAck connection_ack = 11;
+  }
+  // Each SubscribeRequest replaces the complete subscription. To stop receiving
+  // all updates, disconnect; there is no separate unsubscribe message.
+}
+
+enum RouterMessageType {
+  ROUTER_MESSAGE_TYPE_UNSPECIFIED = 0;
+  ROUTER_MESSAGE_TYPE_SUBSCRIBE = 1;         // Router -> Marketstream
+  ROUTER_MESSAGE_TYPE_SUBSCRIBE_ACK = 3;     // Marketstream -> Router
+  ROUTER_MESSAGE_TYPE_FRAME_UPDATE = 5;      // Marketstream -> Router
+  ROUTER_MESSAGE_TYPE_HEARTBEAT = 6;         // Bidirectional
+  ROUTER_MESSAGE_TYPE_ERROR = 7;
+  ROUTER_MESSAGE_TYPE_CONNECTION_ACK = 8;    // Marketstream -> Router
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+}
+
+// PairFilter selects pairs and makers independently; either selector may be
+// omitted. A pair or maker in gray rollout is excluded unless its corresponding
+// allow flag is explicitly true. Setting a selector alone does not grant access
+// to gray rollout data.
+//
+// Setting allowPairGray to true requires an explicit pair; setting allowMakerGray
+// to true requires an explicit maker. Invalid combinations are rejected in
+// SubscribeAck.results.
+message PairFilter {
+  PairKey pair = 1;           // Omitted means no pair restriction.
+  string maker = 2;           // Empty means no maker restriction.
+  bool allowPairGray = 3;     // Includes the specified pair during gray rollout.
+  bool allowMakerGray = 4;    // Includes the specified maker during gray rollout.
+}
+
+// Replaces the connection's complete subscription with these filters. The first
+// request establishes the initial subscription; later requests replace it.
+// Empty filters subscribe to all pairs and makers outside gray rollout.
+// To stop receiving all updates, disconnect; empty filters do not unsubscribe.
+message SubscribeRequest {
+  repeated PairFilter filters = 1;
+}
+
+message PairFilterResult {
+  PairFilter filter = 1;
+  bool ok = 2;
+  string reason = 3;
+}
+
+message SubscribeAck {
+  repeated PairFilterResult results = 1;  // One result per filter in this request.
+}

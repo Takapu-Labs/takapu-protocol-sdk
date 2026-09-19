@@ -1,0 +1,37 @@
+{
+  "chain_id": 97,
+  "rpc_url": "https://YOUR_RPC_ENDPOINT",
+  "api_key": "REPLACE_WITH_API_KEY",
+  "frame_private_key": "REPLACE_WITH_PRIVATE_KEY",
+  "tx_private_key": "",
+  "frame_signer": "REPLACE_WITH_FRAME_SIGNER_ADDRESS",
+  "protocol": "REPLACE_WITH_PROTOCOL_ADDRESS",
+  "maker": "REPLACE_WITH_MAKER_ADDRESS",
+  "pair": {
+    "pair_id": 1,
+    "base_token": "REPLACE_WITH_BASE_TOKEN_ADDRESS",
+    "quote_token": "REPLACE_WITH_QUOTE_TOKEN_ADDRESS",
+    "base_decimals": 8,
+    "quote_decimals": 18,
+    "price_tick_size": "100000000000000000000000000",
+    "lot_size": "10000"
+  },
+  "quote": {
+    "bids": [
+      {
+        "price": "99999",
+        "amount": "0.0001"
+      }
+    ],
+    "asks": [
+      {
+        "price": "100001",
+        "amount": "0.0001"
+      }
+    ]
+  },
+  "next_version": {
+    "major": 1,
+    "minor": 0
+  }
+}

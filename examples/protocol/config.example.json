@@ -1,0 +1,14 @@
+{
+  "chain_id": 1,
+  "rpc_url": "https://YOUR_RPC_HOST/",
+  "protocol": "REPLACE_WITH_PROTOCOL_PROXY_ADDRESS",
+  "payer": "REPLACE_WITH_PAYER_ADDRESS",
+  "input_token": "REPLACE_WITH_INPUT_TOKEN_ADDRESS",
+  "pair_id": 7,
+  "maker": "REPLACE_WITH_MAKER_ADDRESS",
+  "recipient": "REPLACE_WITH_RECIPIENT_ADDRESS",
+  "is_buy": true,
+  "amount_in": "1000000",
+  "min_amount_out": "1",
+  "method": "swap"
+}

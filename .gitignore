@@ -1,0 +1,8 @@
+# Local example credentials and exported calldata.
+examples/.env
+config.local.json
+.config.local.json-*
+e2e-calldata.json
+
+# Pinned local development tools.
+.bin/

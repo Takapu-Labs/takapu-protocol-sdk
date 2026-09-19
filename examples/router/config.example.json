@@ -1,0 +1,16 @@
+{
+  "api_key": "REPLACE_WITH_ROUTER_API_KEY",
+  "filters": [{}],
+  "swap": {
+    "chain_id": 97,
+    "rpc_url": "https://YOUR_RPC_ENDPOINT",
+    "pair_id": 1,
+    "maker": "REPLACE_WITH_MAKER_ADDRESS",
+    "protocol": "REPLACE_WITH_PROTOCOL_PROXY_ADDRESS",
+    "recipient": "REPLACE_WITH_RECIPIENT_ADDRESS",
+    "token_in": "REPLACE_WITH_BASE_TOKEN_ADDRESS",
+    "token_out": "REPLACE_WITH_QUOTE_TOKEN_ADDRESS",
+    "amount_in": "10000",
+    "slippage_bps": 50
+  }
+}
