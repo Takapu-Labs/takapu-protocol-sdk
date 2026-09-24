@@ -1,9 +1,14 @@
 {
   "api_key": "REPLACE_WITH_ROUTER_API_KEY",
-  "filters": [{}],
+  "filters": [
+    {
+      "chain_id": 56,
+      "pair_id": 1
+    }
+  ],
   "swap": {
-    "chain_id": 97,
-    "rpc_url": "https://YOUR_RPC_ENDPOINT",
+    "chain_id": 56,
+    "rpc_url": "https://bsc-dataseed.bnbchain.org",
     "pair_id": 1,
     "maker": "REPLACE_WITH_MAKER_ADDRESS",
     "protocol": "REPLACE_WITH_PROTOCOL_PROXY_ADDRESS",

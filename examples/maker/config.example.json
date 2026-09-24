@@ -1,6 +1,6 @@
 {
-  "chain_id": 97,
-  "rpc_url": "https://YOUR_RPC_ENDPOINT",
+  "chain_id": 56,
+  "rpc_url": "https://bsc-dataseed.bnbchain.org",
   "api_key": "REPLACE_WITH_API_KEY",
   "frame_private_key": "REPLACE_WITH_PRIVATE_KEY",
   "tx_private_key": "",

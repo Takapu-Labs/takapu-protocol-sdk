@@ -1,6 +1,6 @@
 {
-  "chain_id": 1,
-  "rpc_url": "https://YOUR_RPC_HOST/",
+  "chain_id": 56,
+  "rpc_url": "https://bsc-dataseed.bnbchain.org",
   "protocol": "REPLACE_WITH_PROTOCOL_PROXY_ADDRESS",
   "payer": "REPLACE_WITH_PAYER_ADDRESS",
   "input_token": "REPLACE_WITH_INPUT_TOKEN_ADDRESS",

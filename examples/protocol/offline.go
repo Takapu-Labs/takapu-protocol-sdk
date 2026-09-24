@@ -15,7 +15,7 @@ func runOffline() error {
 	// 1. The caller supplies the pair, deployment, integer book, time and version.
 	// These addresses and this historical timestamp are offline fixture values.
 	spec := frame.FrameSpec{
-		ChainID:  1,
+		ChainID:  56,
 		Protocol: common.HexToAddress("0x1111111111111111111111111111111111111111"),
 		Maker:    common.HexToAddress("0x2222222222222222222222222222222222222222"),
 		Pair: frame.PairParams{

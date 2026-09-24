@@ -13,8 +13,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// Configure a trusted RPC endpoint and deployed protocol proxy for the same
-// chain as Listing. This example performs read-only calls and does not sign.
+// Configure a trusted BSC mainnet RPC endpoint and deployed protocol proxy.
+// This example performs read-only calls and does not sign.
 func ExamplePair_FrameParams() {
 	ctx := context.Background()
 	client, err := listing.NewClient(listing.Config{APIKey: os.Getenv("TAKAPU_API_KEY")})
@@ -27,7 +27,7 @@ func ExamplePair_FrameParams() {
 	}
 	defer rpc.Close()
 	contract, err := protocol.NewClient(ctx, rpc, protocol.Config{
-		ChainID: 97, Proxy: common.HexToAddress(os.Getenv("TAKAPU_PROTOCOL_PROXY")),
+		ChainID: 56, Proxy: common.HexToAddress(os.Getenv("TAKAPU_PROTOCOL_PROXY")),
 	}) // NewClient verifies the RPC chain ID.
 	if err != nil {
 		panic(err)

@@ -105,7 +105,7 @@ func TestTransactionOptions(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cfg := config{ChainID: 97}
+	cfg := config{ChainID: 56}
 	for _, separateSender := range []bool{false, true} {
 		want := crypto.PubkeyToAddress(frameKey.PublicKey)
 		if separateSender {
@@ -128,7 +128,7 @@ func TestTransactionOptions(t *testing.T) {
 
 func TestOnChainConfig(t *testing.T) {
 	address := "0x1111111111111111111111111111111111111111"
-	cfg := config{ChainID: 97, RPCURL: "https://example.invalid", Protocol: address, Maker: address, Signer: address}
+	cfg := config{ChainID: 56, RPCURL: "https://example.invalid", Protocol: address, Maker: address, Signer: address}
 	cfg.Pair.ID, cfg.Pair.BaseToken, cfg.Pair.QuoteToken = 1, address, address
 	cfg.Quote.Bids = []maker.PriceLevel{{Price: "1", Amount: "1"}}
 	cfg.Quote.Asks = []maker.PriceLevel{{Price: "2", Amount: "1"}}

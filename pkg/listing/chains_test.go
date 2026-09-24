@@ -16,7 +16,7 @@ func chainsEnvelope() map[string]any {
 	return map[string]any{
 		"success": true,
 		"data": map[string]uint64{
-			"ethereum": 1, "bsc": 56, "bsc_testnet": 97, "polygon": 137,
+			"ethereum": 1, "bsc": 56, "polygon": 137,
 			"base": 8453, "arbitrum": 42161, "sepolia": 11155111,
 		},
 	}
@@ -41,7 +41,7 @@ func TestListChainsAuthenticationAndIndependentResults(t *testing.T) {
 		t.Fatal("constructor made a request")
 	}
 	want := map[string]uint64{
-		"ethereum": 1, "bsc": 56, "bsc_testnet": 97, "polygon": 137,
+		"ethereum": 1, "bsc": 56, "polygon": 137,
 		"base": 8453, "arbitrum": 42161, "sepolia": 11155111,
 	}
 	for range 2 {

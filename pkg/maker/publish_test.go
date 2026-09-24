@@ -48,7 +48,7 @@ func quoteParams(t *testing.T) maker.PublishParams {
 		t.Fatal(err)
 	}
 	return maker.PublishParams{
-		ChainID:  97,
+		ChainID:  56,
 		Protocol: common.HexToAddress("0x1111111111111111111111111111111111111111"),
 		Maker:    common.HexToAddress("0x2222222222222222222222222222222222222222"),
 		Pair: maker.PairParams{
