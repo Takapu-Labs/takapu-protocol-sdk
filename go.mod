@@ -1,6 +1,6 @@
 module github.com/Takapu-Labs/takapu-protocol-sdk
 
-go 1.26.8
+go 1.26.9
 
 require (
 	github.com/ethereum/go-ethereum v1.17.2
