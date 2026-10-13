@@ -23,8 +23,9 @@ const quotePPM uint32 = 1_000_000
 // fill can be a fractional lot, while insufficient depth and input fees can
 // still leave input unspent. Each touched bid level's quote output is floored
 // once and each touched ask level's cost is ceiled once. Empty books, or a budget
-// too small to fill one native base unit or to produce nonzero output, return
-// ErrZeroOutput.
+// whose match produces zero net output, return ErrZeroOutput. A buy that cannot
+// afford one native base unit and a sell whose quote output floors to zero both
+// fall under this; sub-lot budgets otherwise fill fractionally.
 //
 // Quote trusts the decoded fields validated by Marketstream and does not decode
 // or validate the signed compact frame again. This is a local estimate; it does
