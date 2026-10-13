@@ -92,7 +92,7 @@ func quoteSpec(params PublishParams) (frame.FrameSpec, error) {
 		// rejected.
 		bestBid, _ := new(big.Rat).SetString(params.Bids[0].Price)
 		bestAsk, _ := new(big.Rat).SetString(params.Asks[0].Price)
-		if bestBid.Cmp(bestAsk) > 0 || bids[0].Offset > asks[0].Offset {
+		if bestBid.Cmp(bestAsk) > 0 {
 			return frame.FrameSpec{}, errors.New("maker: best bid must not exceed best ask")
 		}
 	}

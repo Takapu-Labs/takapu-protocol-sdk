@@ -19,10 +19,12 @@ const quotePPM uint32 = 1_000_000
 // The current Unix time is sampled once per call.
 // tokenIn/base sells into bids; tokenIn/quote buys from asks. The pair must match cfg.
 //
-// amountIn is a maximum spend, matching the protocol's partial-fill semantics:
-// whole-lot truncation, insufficient depth and input fees can leave input
-// unspent. Output is rounded down per bid level, ask cost up per ask level.
-// Empty books or a budget too small to produce output return ErrZeroOutput.
+// amountIn is a maximum spend, matching the protocol's native-unit matching: a
+// fill can be a fractional lot, while insufficient depth and input fees can
+// still leave input unspent. Each touched bid level's quote output is floored
+// once and each touched ask level's cost is ceiled once. Empty books, or a budget
+// too small to fill one native base unit or to produce nonzero output, return
+// ErrZeroOutput.
 //
 // Quote trusts the decoded fields validated by Marketstream and does not decode
 // or validate the signed compact frame again. This is a local estimate; it does
@@ -92,52 +94,52 @@ func matchQuote(levels []*pb.PriceLevel, tokenIn, tokenOut common.Address, amoun
 	scale := big.NewInt(1_000_000_000_000_000_000)
 	roundUp := new(big.Int).Sub(scale, big.NewInt(1))
 	out := new(big.Int)
-	var price, available, lots, base, quote big.Int
+	var price, available, take, cost, quote big.Int
 	for i, level := range levels {
 		if budget.Sign() == 0 {
 			break
 		}
-		if !buy {
-			lots.Quo(budget, cfg.Pair.LotSize)
-			if lots.Sign() == 0 {
-				break
-			}
-		}
 		if err := quoteDecimal(&price, level.GetPrice(), priceScale); err != nil {
 			return nil, fmt.Errorf("router: level %d price: %w", i, err)
 		}
-		if buy {
-			// Preserve both the contract's nested floors and its uint256
-			// bound on the first quotient, even when final output fits.
-			lots.Mul(budget, scale)
-			lots.Quo(&lots, cfg.Pair.LotSize)
-			if lots.BitLen() > 256 {
-				return nil, errors.New("router: ask affordability exceeds uint256")
-			}
-			lots.Quo(&lots, &price)
-			if lots.Sign() == 0 {
-				break
-			}
-		}
+		// available is the level's raw depth in native base units (a whole number
+		// of lots). A fill may take a fractional part of the final lot; the
+		// protocol still occupies whole lots of depth, which this estimate ignores.
 		if err := quoteDecimal(&available, level.GetAmount(), int(cfg.Pair.BaseDecimals)); err != nil {
 			return nil, fmt.Errorf("router: level %d amount: %w", i, err)
 		}
-		available.Quo(&available, cfg.Pair.LotSize)
-		if lots.Cmp(&available) > 0 {
-			lots.Set(&available)
-		}
-		base.Mul(&lots, cfg.Pair.LotSize)
-		quote.Mul(&base, &price)
 		if buy {
-			// Ceil the complete touched level once, not each individual lot.
-			quote.Add(&quote, roundUp)
-			quote.Quo(&quote, scale)
-			budget.Sub(budget, &quote)
-			out.Add(out, &base)
+			// Ask: cost the full level once with ceil before inverting the price,
+			// so an extreme budget cannot overflow the affordable base quotient.
+			cost.Mul(&available, &price)
+			cost.Add(&cost, roundUp)
+			cost.Quo(&cost, scale)
+			take.Set(&available)
+			if cost.Cmp(budget) > 0 {
+				take.Mul(budget, scale)
+				take.Quo(&take, &price)
+				if take.Sign() == 0 {
+					break // not even one native base unit; later levels cost more
+				}
+				cost.Mul(&take, &price)
+				cost.Add(&cost, roundUp)
+				cost.Quo(&cost, scale)
+			}
+			out.Add(out, &take)
+			budget.Sub(budget, &cost)
+			if take.Cmp(&available) < 0 {
+				break // residual budget cannot buy another native base unit
+			}
 		} else {
+			// Bid: sell base for quote, one floor per touched level.
+			take.Set(&available)
+			if take.Cmp(budget) > 0 {
+				take.Set(budget)
+			}
+			quote.Mul(&take, &price)
 			quote.Quo(&quote, scale)
-			budget.Sub(budget, &base)
 			out.Add(out, &quote)
+			budget.Sub(budget, &take)
 		}
 		if out.BitLen() > 256 {
 			return nil, errors.New("router: quote output exceeds uint256")
