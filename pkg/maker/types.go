@@ -37,10 +37,13 @@ type PriceLevel struct {
 
 // PublishParams describes a quote and signing context for Maker.Publish or
 // Maker.SubmitFrameUpdate. Each side supports up to five levels: bids
-// strictly descending, asks strictly ascending, with best bid below best ask.
-// Locked or crossed input books are rejected even if rounding would uncross them.
-// Prices must remain strictly ordered after rounding; levels that round to the
-// same tick or zero lots are rejected, never merged or dropped.
+// strictly descending, asks strictly ascending, with best bid at or below
+// best ask. Locked books (best bid equal to best ask, i.e. zero spread) are
+// valid on both the input decimals and the rounded ticks. Crossed input
+// books (best bid strictly above best ask) are rejected even if rounding
+// would uncross them. Prices must remain strictly ordered after rounding;
+// levels that round to the same tick or zero lots are rejected, never merged
+// or dropped.
 // One-sided books are valid; both empty withdraw the quote. Versions and
 // UpdatedAt (Unix seconds) are supplied unchanged; the caller manages inventory
 // and reserves versions before publishing, including across restarts and failed

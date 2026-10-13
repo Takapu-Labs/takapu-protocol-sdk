@@ -144,7 +144,7 @@ func decodeSubmittedFrame(t *testing.T, tx *types.Transaction, params maker.Publ
 }
 
 func TestSubmitFrameUpdateBuildsSignsAndBroadcasts(t *testing.T) {
-	for _, name := range []string{"quotes", "rounded quotes", "long decimal presentation", "withdrawal"} {
+	for _, name := range []string{"quotes", "rounded quotes", "long decimal presentation", "withdrawal", "locked book"} {
 		t.Run(name, func(t *testing.T) {
 			params := quoteParams(t)
 			switch name {
@@ -159,6 +159,12 @@ func TestSubmitFrameUpdateBuildsSignsAndBroadcasts(t *testing.T) {
 				params.Asks = nil
 			case "withdrawal":
 				params.Bids, params.Asks = nil, nil
+			case "locked book":
+				// Zero-spread book on already tick-aligned decimals: bid and
+				// ask round to the same tick, so the signed compact frame ends
+				// up with best offsets of zero on both sides.
+				params.Bids = []maker.PriceLevel{{Price: "100.01", Amount: "0.002"}}
+				params.Asks = []maker.PriceLevel{{Price: "100.01", Amount: "0.004"}}
 			}
 			checkQuoteParamsUnchanged(t, &params)
 			client, api := submitClient(t, params, nil)
@@ -187,6 +193,10 @@ func TestSubmitFrameUpdateBuildsSignsAndBroadcasts(t *testing.T) {
 			case "withdrawal":
 				wantHeader.BaseTick = 1
 				wantBids, wantAsks = nil, nil
+			case "locked book":
+				wantHeader.BaseTick = 10001
+				wantBids = []frame.Level{{Offset: 0, QtyLots: 2}}
+				wantAsks = []frame.Level{{Offset: 0, QtyLots: 4}}
 			case "long decimal presentation":
 				wantHeader.BaseTick = 3333
 				wantBids = []frame.Level{{Offset: 0, QtyLots: 2}}
@@ -236,7 +246,7 @@ func TestSubmitFrameUpdateRejectsInputsBeforeSigning(t *testing.T) {
 		"nil maker", "nil client", "uninitialized client", "chain mismatch", "proxy mismatch", "invalid quote",
 		"nil options", "missing transaction signer", "missing transaction sender", "missing frame signer",
 		"amount rounds to zero", "ask rounds past uint24", "lot overflow", "rounded duplicate bids", "rounded duplicate asks",
-		"unaligned locked book", "unaligned crossed book",
+		"unaligned crossed book",
 	} {
 		t.Run(name, func(t *testing.T) {
 			params := quoteParams(t)
@@ -273,8 +283,6 @@ func TestSubmitFrameUpdateRejectsInputsBeforeSigning(t *testing.T) {
 				params.Bids[0].Price, params.Bids[1].Price = "99.999", "99.991"
 			case "rounded duplicate asks":
 				params.Asks[0].Price, params.Asks[1].Price = "100.001", "100.009"
-			case "unaligned locked book":
-				params.Bids[0].Price, params.Asks[0].Price = "100.005", "100.005"
 			case "unaligned crossed book":
 				params.Bids[0].Price, params.Asks[0].Price = "100.005", "100.004"
 			case "nil options":

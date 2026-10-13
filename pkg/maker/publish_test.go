@@ -115,6 +115,7 @@ func TestPublishBuildsAndSignsDecimalQuotes(t *testing.T) {
 	for _, name := range []string{
 		"two sides", "bid only", "ask only", "withdraw", "negative price scale", "uint24 boundaries", "five levels",
 		"rounded quotes", "rounded negative price scale", "nondecimal steps", "rounds into uint24 boundaries", "ask rounds to first tick",
+		"locked book", "unaligned locked book",
 	} {
 		t.Run(name, func(t *testing.T) {
 			params := quoteParams(t)
@@ -163,6 +164,18 @@ func TestPublishBuildsAndSignsDecimalQuotes(t *testing.T) {
 				params.Bids = nil
 				params.Asks = []maker.PriceLevel{{Price: "0.000001", Amount: "0.001999"}}
 				wantAsks = []maker.PriceLevel{{Price: "0.01", Amount: "0.001"}}
+			case "locked book":
+				// Zero-spread book: best bid exactly equals best ask on already
+				// aligned decimal inputs. Both round to the same tick, so the
+				// signed compact frame carries best offsets of zero on both sides.
+				params.Bids[0].Price = params.Asks[0].Price // "100.01"
+			case "unaligned locked book":
+				// Equal decimal inputs that are not tick-aligned: bid rounds down,
+				// ask rounds up, so the signed compact frame ends up with a strict
+				// one-tick spread even though the caller supplied a locked book.
+				params.Bids[0].Price, params.Asks[0].Price = "100.005", "100.005"
+				wantBids = []maker.PriceLevel{{Price: "100", Amount: "0.002"}, {Price: "99.98", Amount: "0.003"}}
+				wantAsks = []maker.PriceLevel{{Price: "100.01", Amount: "0.004"}, {Price: "100.02", Amount: "0.005"}}
 			}
 			if wantBids == nil {
 				wantBids = params.Bids
@@ -270,9 +283,7 @@ func TestPublishRejectsInvalidQuotesBeforeSigning(t *testing.T) {
 		"duplicate prices":       func(p *maker.PublishParams) { p.Bids[1].Price = p.Bids[0].Price },
 		"rounded duplicate bids": func(p *maker.PublishParams) { p.Bids[0].Price, p.Bids[1].Price = "99.999", "99.991" },
 		"rounded duplicate asks": func(p *maker.PublishParams) { p.Asks[0].Price, p.Asks[1].Price = "100.001", "100.009" },
-		"locked book":            func(p *maker.PublishParams) { p.Bids[0].Price = p.Asks[0].Price },
 		"crossed book":           func(p *maker.PublishParams) { p.Bids[0].Price = "101" },
-		"unaligned locked book":  func(p *maker.PublishParams) { p.Bids[0].Price, p.Asks[0].Price = "100.005", "100.005" },
 		"unaligned crossed book": func(p *maker.PublishParams) { p.Bids[0].Price, p.Asks[0].Price = "100.005", "100.004" },
 		"six levels":             func(p *maker.PublishParams) { p.Bids = make([]maker.PriceLevel, 6) },
 		"missing scale":          func(p *maker.PublishParams) { p.Pair.PriceTickSize = nil },
