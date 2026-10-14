@@ -99,9 +99,9 @@ func TestQuoteContractDepthVectors(t *testing.T) {
 		name, amountIn, want string
 		buy                  bool
 	}{
-		{"buy multiple levels", "4819492361611371712678", "1957700000000000000", true},
+		{"buy multiple levels", "4819492361611371712678", "1957700081569587543", true},
 		{"buy full depth", "10799526480848443322111", "3980500000000000000", true},
-		{"sell multiple levels", "25171745678901234567", "61597076366089000000000", false},
+		{"sell multiple levels", "25171745678901234567", "61597188144496723196190", false},
 		{"sell full depth", "30123456789123456789", "66079433673563000000000", false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -124,21 +124,16 @@ func TestQuoteContractRoundingVectors(t *testing.T) {
 	spec.Bids, spec.Asks = []frame.Level{{Offset: 1, QtyLots: 10}}, []frame.Level{{Offset: 0, QtyLots: 10}}
 	value, cfg := quoteFrame(t, spec)
 	cfg.FeeToken, cfg.FeeRatePPM = cfg.Pair.QuoteToken, 3000
+	// DEPTH_HANDCALC 5.2: B'=81815, base gross = floor(81815*1e18/(245445*3333))
+	// = 100010001000100; age 0 so net = gross. A native-unit fill slightly above
+	// one lot instead of a whole-lot truncation.
 	got, err := router.Quote(value, cfg.Pair.QuoteToken, cfg.Pair.BaseToken, big.NewInt(82060), cfg)
-	if err != nil || got.Cmp(big.NewInt(100_000_000_000_000)) != 0 {
+	if err != nil || got.Cmp(big.NewInt(100_010_001_000_100)) != 0 {
 		t.Fatalf("buy = %v, %v", got, err)
 	}
-	// Input fee inversion's +1 correction makes exactly one lot affordable:
-	// cost=81807, fee=floor(81807*.003)=245, total=82052.
-	got, err = router.Quote(value, cfg.Pair.QuoteToken, cfg.Pair.BaseToken, big.NewInt(82052), cfg)
-	if err != nil || got.Cmp(spec.Pair.LotSize) != 0 {
-		t.Fatalf("exact fee budget = %v, %v", got, err)
-	}
-	if _, err := router.Quote(value, cfg.Pair.QuoteToken, cfg.Pair.BaseToken, big.NewInt(82051), cfg); !errors.Is(err, router.ErrZeroOutput) {
-		t.Fatalf("below first lot = %v", err)
-	}
+	// DEPTH_HANDCALC 5.1 without decay: selling one lot floors the bid output to
+	// 81806, then the 3000 PPM output fee floors to 245, leaving 81561.
 	got, err = router.Quote(value, cfg.Pair.BaseToken, cfg.Pair.QuoteToken, spec.Pair.LotSize, cfg)
-	// floor(bid)=81806, output fee=floor(81806*.003)=245.
 	if err != nil || got.Cmp(big.NewInt(81561)) != 0 {
 		t.Fatalf("bid output after fee = %v, %v", got, err)
 	}
@@ -201,9 +196,10 @@ func TestQuoteFeeSwitchesAndBaseFeeDirection(t *testing.T) {
 		t.Fatalf("disabled fee = %v, %v", got, err)
 	}
 	cfg.FeeToken, cfg.FeeRatePPM = cfg.Pair.BaseToken, 100000
-	// Selling base: 20 cannot afford two ten-unit lots plus their input fee.
+	// Selling base: the input fee leaves a 19-unit leg that fills fractionally
+	// (19 base at price 2 = 38 quote) instead of truncating to one ten-unit lot.
 	got, err = router.Quote(value, cfg.Pair.BaseToken, cfg.Pair.QuoteToken, big.NewInt(20), cfg)
-	if err != nil || got.Int64() != 20 {
+	if err != nil || got.Int64() != 38 {
 		t.Fatalf("base input fee = %v, %v", got, err)
 	}
 	got, err = router.Quote(value, cfg.Pair.BaseToken, cfg.Pair.QuoteToken, big.NewInt(22), cfg)
@@ -267,22 +263,23 @@ func TestQuoteRejectsInvalidInputs(t *testing.T) {
 
 func TestQuoteEmptyBookAndDust(t *testing.T) {
 	spec := quoteSpec()
-	for _, buy := range []bool{false, true} {
-		value, cfg := quoteFrame(t, spec)
-		tokenIn, tokenOut := cfg.Pair.BaseToken, cfg.Pair.QuoteToken
-		if buy {
-			tokenIn, tokenOut = tokenOut, tokenIn
-		}
-		if _, err := router.Quote(value, tokenIn, tokenOut, big.NewInt(1), cfg); !errors.Is(err, router.ErrZeroOutput) {
-			t.Fatalf("dust buy=%v: %v", buy, err)
-		}
+	value, cfg := quoteFrame(t, spec)
+	// Selling a single native base unit now fills fractionally: the best bid
+	// floors 1 * 2454.44 to 2454 quote instead of truncating to zero lots.
+	if got, err := router.Quote(value, cfg.Pair.BaseToken, cfg.Pair.QuoteToken, big.NewInt(1), cfg); err != nil || got.Int64() != 2454 {
+		t.Fatalf("fractional sell dust = %v, %v", got, err)
+	}
+	// A single quote unit cannot afford one native base unit of the best ask, so
+	// the buy side still yields zero output.
+	if _, err := router.Quote(value, cfg.Pair.QuoteToken, cfg.Pair.BaseToken, big.NewInt(1), cfg); !errors.Is(err, router.ErrZeroOutput) {
+		t.Fatalf("buy dust = %v", err)
 	}
 	spec.Bids, spec.Asks = nil, nil
-	value, cfg := quoteFrame(t, spec)
+	value, cfg = quoteFrame(t, spec)
 	if _, err := router.Quote(value, cfg.Pair.BaseToken, cfg.Pair.QuoteToken, cfg.Pair.LotSize, cfg); !errors.Is(err, router.ErrZeroOutput) {
 		t.Fatalf("empty book: %v", err)
 	}
-	// A whole lot with sub-unit bid output also fails, matching ZeroOutput.
+	// A whole lot whose bid output rounds below one quote unit also fails.
 	spec.Pair.LotSize, spec.Pair.PriceTickSize = big.NewInt(1), big.NewInt(1)
 	spec.Bids = []frame.Level{{Offset: 1, QtyLots: 1}}
 	value, cfg = quoteFrame(t, spec)
@@ -291,20 +288,19 @@ func TestQuoteEmptyBookAndDust(t *testing.T) {
 	}
 }
 
-func TestQuoteAskAffordabilityUint256Overflow(t *testing.T) {
+func TestQuoteAskExtremeBudgetIsBounded(t *testing.T) {
 	spec := quoteSpec()
 	spec.Pair.LotSize, spec.Pair.PriceTickSize = big.NewInt(1), big.NewInt(1)
 	spec.Bids, spec.Asks = nil, []frame.Level{{Offset: 0, QtyLots: 1}}
 	value, cfg := quoteFrame(t, spec)
+	// The full-level cost is ceiled before the inverse price division, so even a
+	// uint256-max budget fills only the available depth without overflowing.
 	max := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
-	if _, err := router.Quote(value, cfg.Pair.QuoteToken, cfg.Pair.BaseToken, max, cfg); err == nil {
-		t.Fatal("accepted a budget whose first Solidity mulDiv quotient overflows uint256")
-	}
-	// The precise representable intermediate boundary still returns a capped fill.
-	boundary := new(big.Int).Quo(max, big.NewInt(1_000_000_000_000_000_000))
-	got, err := router.Quote(value, cfg.Pair.QuoteToken, cfg.Pair.BaseToken, boundary, cfg)
-	if err != nil || got.Int64() != 1 {
-		t.Fatalf("representable affordability boundary = %v, %v", got, err)
+	for _, amount := range []*big.Int{max, new(big.Int).Quo(max, big.NewInt(1_000_000_000_000_000_000))} {
+		got, err := router.Quote(value, cfg.Pair.QuoteToken, cfg.Pair.BaseToken, amount, cfg)
+		if err != nil || got.Int64() != 1 {
+			t.Fatalf("extreme budget = %v, %v", got, err)
+		}
 	}
 }
 
@@ -409,11 +405,11 @@ func TestQuoteOnlyReadsNeededLevels(t *testing.T) {
 	for _, buy := range []bool{false, true} {
 		value, cfg := quoteFrame(t, quoteSpec())
 		tokenIn, tokenOut := cfg.Pair.BaseToken, cfg.Pair.QuoteToken
-		amount, want := "100000000000001", "245444000000000000"
+		amount, want := "100000000000000", "245444000000000000"
 		value.Bids[0].Amount, value.Asks[0].Amount = "0.0001", "0.0001"
 		if buy {
 			tokenIn, tokenOut = tokenOut, tokenIn
-			amount, want = "245445000000000001", "100000000000000"
+			amount, want = "245445000000000000", "100000000000000"
 			value.Bids = []*pb.PriceLevel{nil}
 			value.Asks[1].Amount = "invalid"
 		} else {
@@ -424,5 +420,34 @@ func TestQuoteOnlyReadsNeededLevels(t *testing.T) {
 		if err != nil || got.String() != want {
 			t.Fatalf("unused levels, buy=%v: %v, %v", buy, got, err)
 		}
+	}
+}
+
+func TestQuoteFractionalLotFills(t *testing.T) {
+	// Bids at price 2 and 1, an ask at price 4, and a one-base-token lot, so the
+	// fractional-lot fills below are exact by hand and independent of rounding.
+	spec := quoteSpec()
+	spec.Pair.PriceTickSize = big.NewInt(1_000_000_000_000_000_000)
+	spec.Pair.LotSize = big.NewInt(1_000_000_000_000_000_000)
+	spec.BaseTick = 3
+	spec.Bids = []frame.Level{{Offset: 1, QtyLots: 1}, {Offset: 2, QtyLots: 1}}
+	spec.Asks = []frame.Level{{Offset: 1, QtyLots: 1}}
+	value, cfg := quoteFrame(t, spec)
+
+	// Sell half a lot at price 2: floor(0.5e18 * 2e18 / 1e18) = 1e18 quote.
+	got, err := router.Quote(value, cfg.Pair.BaseToken, cfg.Pair.QuoteToken, big.NewInt(500_000_000_000_000_000), cfg)
+	if err != nil || got.String() != "1000000000000000000" {
+		t.Fatalf("fractional sell = %v, %v", got, err)
+	}
+	// Sell 1.5 base: one full lot at price 2 then a 0.5-lot tail at price 1,
+	// giving 2e18 + 0.5e18 = 2.5e18 quote across two walls.
+	got, err = router.Quote(value, cfg.Pair.BaseToken, cfg.Pair.QuoteToken, big.NewInt(1_500_000_000_000_000_000), cfg)
+	if err != nil || got.String() != "2500000000000000000" {
+		t.Fatalf("cross-wall fractional sell = %v, %v", got, err)
+	}
+	// Buy with less than one lot's cost: floor(1e18 * 1e18 / 4e18) = 0.25e18 base.
+	got, err = router.Quote(value, cfg.Pair.QuoteToken, cfg.Pair.BaseToken, big.NewInt(1_000_000_000_000_000_000), cfg)
+	if err != nil || got.String() != "250000000000000000" {
+		t.Fatalf("fractional buy = %v, %v", got, err)
 	}
 }

@@ -294,10 +294,7 @@ func TestPrepareInputRejections(t *testing.T) {
 		"uint128 overflow": func(s *frame.FrameSpec) { s.Pair.PriceTickSize = new(big.Int).Lsh(big.NewInt(1), 128) },
 		"codec":            func(s *frame.FrameSpec) { s.CodecVersion = 2 }, "zero base": func(s *frame.FrameSpec) { s.BaseTick = 0 }, "base overflow": func(s *frame.FrameSpec) { s.BaseTick = 1 << 24 },
 		"six levels": func(s *frame.FrameSpec) { s.Bids = make([]frame.Level, 6) }, "zero lot": func(s *frame.FrameSpec) { s.Bids[0].QtyLots = 0 }, "lot overflow": func(s *frame.FrameSpec) { s.Bids[0].QtyLots = 1 << 24 }, "offset overflow": func(s *frame.FrameSpec) { s.Bids[0].Offset = 1 << 24 },
-		"bid zero price": func(s *frame.FrameSpec) { s.Bids[0].Offset = s.BaseTick }, "ask overflow": func(s *frame.FrameSpec) { s.Asks[0].Offset = frame.MaxTick }, "locked book": func(s *frame.FrameSpec) {
-			s.Bids[0].Offset = 0
-			s.Asks[0].Offset = 0
-		},
+		"bid zero price": func(s *frame.FrameSpec) { s.Bids[0].Offset = s.BaseTick }, "ask overflow": func(s *frame.FrameSpec) { s.Asks[0].Offset = frame.MaxTick },
 		"duplicate price": func(s *frame.FrameSpec) { s.Bids = append(s.Bids, frame.Level{Offset: 2, QtyLots: 1}) }, "wrong order": func(s *frame.FrameSpec) { s.Bids = append(s.Bids, frame.Level{Offset: 1, QtyLots: 1}) },
 	}
 	for name, change := range tests {
@@ -419,10 +416,6 @@ func TestContractCanonicalBitAndLadderRules(t *testing.T) {
 			f.AskLevels[27] = 255
 			f.AskLevels[28] = 255
 		},
-		"locked": func(f *frame.CompactFrame) {
-			f.BidLevels[28] = 0
-			f.AskLevels[28] = 0
-		},
 	}
 	for name, change := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -493,4 +486,26 @@ type wrongSigner struct{ keySigner }
 
 func (*wrongSigner) SignDigest(context.Context, common.Hash) ([]byte, error) {
 	return common.FromHex(wrongSignerHex), nil
+}
+
+// TestValidateCompactFrameAcceptsLockedBook covers the relaxed rule that a
+// zero-spread book (best bid equal to best ask, both best offsets zero) is a
+// valid CompactFrame. Historically this shape was rejected as "crossed"; the
+// unsigned offset encoding cannot represent a truly crossed book
+// (bid tick = BaseTick - Offset <= BaseTick <= BaseTick + Offset = ask tick),
+// so removing the check leaves the compact codec consistent with the
+// marketstream E2 relaxation.
+func TestValidateCompactFrameAcceptsLockedBook(t *testing.T) {
+	valid := mustPrepare(t, spec()).SigningPayload().Frame
+	// Force both best offsets to zero while keeping quantities positive, so
+	// bestBid == bestAsk == BaseTick.
+	valid.BidLevels[26] = 0
+	valid.BidLevels[27] = 0
+	valid.BidLevels[28] = 0
+	valid.AskLevels[26] = 0
+	valid.AskLevels[27] = 0
+	valid.AskLevels[28] = 0
+	if err := frame.ValidateCompactFrame(valid); err != nil {
+		t.Fatalf("locked book rejected: %v", err)
+	}
 }

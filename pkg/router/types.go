@@ -35,10 +35,11 @@ type ListingConfig = stream.ListingConfig
 type RouterConfig = stream.RouterConfig
 
 // QuoteConfig supplies pair metadata, effective fees and the decay start for
-// local quotes; BuildSwap and BuildSwapExactIn do not use it. Pair.LotSize controls
-// whole-lot truncation. Pair.BaseDecimals and Pair.QuoteDecimals convert the frame's
-// readable prices and amounts to native units. Pair.PriceTickSize is validated
-// as part of the pair configuration but is not used to reconstruct prices.
+// local quotes; BuildSwap and BuildSwapExactIn do not use it. Matching fills
+// fractional lots in native base units, so Pair.LotSize and Pair.PriceTickSize are
+// validated as part of the pair configuration but are not used to compute the quote.
+// Pair.BaseDecimals and Pair.QuoteDecimals convert the frame's readable prices and
+// amounts to native units.
 // The listing API's Tax is the same protocol fee described by FeeToken and
 // FeeRatePPM, not an additional deduction. Callers supply current configuration;
 // quoting does not fetch it or retain it. When protocol fee collection is

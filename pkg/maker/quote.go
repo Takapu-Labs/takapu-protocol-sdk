@@ -86,11 +86,14 @@ func quoteSpec(params PublishParams) (frame.FrameSpec, error) {
 	}
 	if len(bids) > 0 && len(asks) > 0 {
 		// quoteLevels already validated these decimals. Outward rounding must
-		// not silently repair a locked or crossed input book.
+		// not silently repair a crossed input book. Locked books (best bid
+		// equal to best ask, both in decimal input and after rounding to
+		// ticks) are permitted; only a strict best bid above best ask is
+		// rejected.
 		bestBid, _ := new(big.Rat).SetString(params.Bids[0].Price)
 		bestAsk, _ := new(big.Rat).SetString(params.Asks[0].Price)
-		if bestBid.Cmp(bestAsk) >= 0 || bids[0].Offset >= asks[0].Offset {
-			return frame.FrameSpec{}, errors.New("maker: best bid must be below best ask")
+		if bestBid.Cmp(bestAsk) > 0 {
+			return frame.FrameSpec{}, errors.New("maker: best bid must not exceed best ask")
 		}
 	}
 	// base is the common price reference in whole ticks, stored as BaseTick.

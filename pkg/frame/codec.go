@@ -121,9 +121,11 @@ func decodeCompactFrame(value CompactFrame) (decodedCompactFrame, error) {
 	if len(asks) > 0 && uint64(asks[len(asks)-1].Offset)+uint64(h.BaseTick) > uint64(MaxTick) {
 		return decodedCompactFrame{}, errors.New("frame: ask price exceeds uint24")
 	}
-	if len(bids) > 0 && len(asks) > 0 && bids[0].Offset == 0 && asks[0].Offset == 0 {
-		return decodedCompactFrame{}, errors.New("frame: best bid must be below best ask")
-	}
+	// Locked books (best bid equal to best ask, both offsets zero) are valid.
+	// Truly crossed books (best bid strictly above best ask) are unrepresentable
+	// in CompactFrame: offsets are unsigned and bid tick = BaseTick - Offset <=
+	// BaseTick <= BaseTick + Offset = ask tick, so the encoding cannot express
+	// bid > ask. Readable-price inconsistency is caught by higher-level checks.
 	return decodedCompactFrame{header: h, bids: bids, asks: asks}, nil
 }
 

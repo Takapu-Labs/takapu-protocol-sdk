@@ -41,7 +41,7 @@ func TestShowSwapUsesReadablePricesAndFetchedScalesAndFees(t *testing.T) {
 		{"tick scale is already decoded", func(p *router.QuoteConfig) { p.Pair.PriceTickSize = big.NewInt(2_000_000_000_000_000_000) }, 1000, 990},
 		{"base decimals", func(p *router.QuoteConfig) { p.Pair.BaseDecimals = 2 }, 10, 9},
 		{"quote decimals", func(p *router.QuoteConfig) { p.Pair.QuoteDecimals = 2 }, 100000, 99000},
-		{"whole lot truncation", func(p *router.QuoteConfig) { p.Pair.LotSize = big.NewInt(3) }, 999, 989},
+		{"fractional lot fill", func(p *router.QuoteConfig) { p.Pair.LotSize = big.NewInt(3) }, 1000, 990},
 		{"input pair fee", func(p *router.QuoteConfig) { p.FeeToken, p.FeeRatePPM = p.Pair.BaseToken, 100_000 }, 909, 899},
 		{"output pair fee", func(p *router.QuoteConfig) { p.FeeToken, p.FeeRatePPM = p.Pair.QuoteToken, 100_000 }, 900, 891},
 		{"zero pair fee", func(p *router.QuoteConfig) { p.FeeToken, p.FeeRatePPM = common.Address{}, 0 }, 1000, 990},
